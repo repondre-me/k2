@@ -1,0 +1,1210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kanban</title>
+<style>
+:root {
+  --bg: #1a1b26;
+  --surface: #24283b;
+  --column-bg: #1f2335;
+  --card-bg: #292e42;
+  --text: #c0caf5;
+  --text-muted: #565f89;
+  --accent: #7aa2f7;
+  --accent-hover: #89b4fa;
+  --border: #3b4261;
+  --shadow: rgba(0,0,0,0.5);
+  --radius: 8px;
+  --transition: 0.2s ease;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+header {
+  background: var(--surface);
+  padding: 16px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+header h1 { font-size: 1.4rem; font-weight: 700; }
+header nav { display: flex; gap: 12px; }
+header nav button {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 16px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: background var(--transition), border-color var(--transition);
+}
+header nav button:hover {
+  background: var(--column-bg);
+  border-color: var(--accent);
+}
+.board {
+  display: flex;
+  gap: 16px;
+  padding: 24px;
+  overflow-x: auto;
+  min-height: calc(100vh - 64px);
+  align-items: flex-start;
+}
+.column {
+  background: var(--column-bg);
+  border-radius: var(--radius);
+  min-width: 280px;
+  max-width: 320px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-top: 4px solid var(--border);
+  transition: border-color var(--transition);
+}
+.column.drag-over { border-color: var(--accent); border-top-color: var(--accent); }
+[data-column-id="backlog"]    { --col-color: #565f89; }
+[data-column-id="todo"]       { --col-color: #7dcfff; }
+[data-column-id="in-progress"]{ --col-color: #ff9e64; }
+[data-column-id="review"]     { --col-color: #bb9af7; }
+[data-column-id="done"]       { --col-color: #9ece6a; }
+[data-column-id]              { border-top-color: var(--col-color); }
+.column-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--col-color, var(--border));
+}
+.column-header h2 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--col-color, var(--text-muted));
+}
+.column-header .count {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  background: var(--bg);
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+.add-card-btn {
+  background: none;
+  border: 1px dashed var(--border);
+  color: var(--text-muted);
+  padding: 8px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 0.85rem;
+  width: 100%;
+  margin-top: 8px;
+  transition: all var(--transition);
+}
+.add-card-btn:hover {
+  border-color: var(--col-color, var(--accent));
+  color: var(--col-color, var(--accent));
+  background: rgba(255, 255, 255, 0.05);
+}
+.cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 8px;
+  flex: 1;
+  padding-bottom: 4px;
+}
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  cursor: grab;
+  position: relative;
+  transition: transform var(--transition), box-shadow var(--transition), opacity var(--transition);
+  user-select: none;
+}
+.card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 2px 12px var(--shadow);
+}
+.card.dragging {
+  opacity: 0.4;
+  transform: rotate(2deg);
+}
+.card.ghost {
+  opacity: 0.3;
+  border-style: dashed;
+}
+.card-title {
+  font-size: 0.9rem;
+  font-weight: 500;
+  margin-bottom: 4px;
+  word-break: break-word;
+}
+.card-desc {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.card-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 8px;
+  justify-content: flex-end;
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+.card:hover .card-actions { opacity: 1; }
+.card-actions button {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  transition: all var(--transition);
+}
+.card-actions button:hover { color: var(--text); background: var(--column-bg); }
+.card-actions .edit-btn:hover { color: #7dcfff; }
+.card-actions .duplicate-btn:hover { color: #9ece6a; }
+.card-actions .archive-btn:hover { color: #ff9e64; }
+.card-actions .delete-btn:hover { color: #f7768e; }
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 200;
+  align-items: center;
+  justify-content: center;
+}
+.modal-overlay.active { display: flex; }
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  width: 90%;
+  max-width: 480px;
+  box-shadow: 0 8px 32px var(--shadow);
+}
+.modal h2 { margin-bottom: 16px; font-size: 1.1rem; }
+.modal label {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+.modal input, .modal textarea {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color var(--transition);
+  margin-bottom: 12px;
+  font-family: inherit;
+}
+.modal input:focus, .modal textarea:focus { border-color: var(--accent); }
+.modal textarea { min-height: 80px; resize: vertical; }
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+.modal-actions button {
+  padding: 8px 20px;
+  border-radius: var(--radius);
+  border: none;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: background var(--transition);
+}
+.modal-actions .btn-cancel {
+  background: var(--column-bg);
+  color: var(--text);
+}
+.modal-actions .btn-cancel:hover { background: var(--border); }
+.modal-actions .btn-confirm {
+  background: var(--accent);
+  color: #fff;
+}
+.modal-actions .btn-confirm:hover { background: var(--accent-hover); }
+.modal-actions .btn-danger {
+  background: #f7768e;
+  color: #fff;
+}
+.modal-actions .btn-danger:hover { background: #ff9aab; }
+
+/* Archive view */
+.view { display: none; }
+.view.active { display: block; }
+#archive-view {
+  padding: 24px;
+  max-width: 960px;
+  margin: 0 auto;
+}
+#archive-view h2 { margin-bottom: 16px; font-size: 1.2rem; }
+.archive-nav {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.archive-nav select, .archive-nav button {
+  padding: 8px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: border-color var(--transition);
+}
+.archive-nav select:focus, .archive-nav button:hover {
+  border-color: var(--accent);
+  outline: none;
+}
+.archive-nav .nav-arrows {
+  display: flex;
+  gap: 4px;
+}
+.archive-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 8px;
+}
+.archive-card .archived-date {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+.archive-card .original-title {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-style: italic;
+  margin-bottom: 8px;
+}
+.archive-card .content { margin-bottom: 8px; }
+.archive-card .content .title { font-weight: 600; font-size: 0.95rem; }
+.archive-card .content .desc {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+.archive-empty {
+  text-align: center;
+  padding: 48px 24px;
+  color: var(--text-muted);
+}
+.week-label {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #7dcfff;
+}
+/* Settings view */
+#settings-view {
+  padding: 24px;
+  max-width: 640px;
+  margin: 0 auto;
+}
+#settings-view h2 {
+  margin-bottom: 16px;
+  font-size: 1.2rem;
+}
+.settings-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 16px;
+}
+.settings-section h3 {
+  font-size: 1rem;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.settings-section button {
+  padding: 10px 20px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--column-bg);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.85rem;
+  margin-right: 8px;
+  margin-bottom: 8px;
+  transition: background var(--transition), border-color var(--transition);
+}
+.settings-section button:hover {
+  border-color: var(--accent);
+  background: var(--card-bg);
+}
+.settings-section .btn-danger {
+  border-color: #f7768e;
+  color: #f7768e;
+}
+.settings-section .btn-danger:hover {
+  background: #f7768e;
+  color: #fff;
+}
+.import-options {
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--column-bg);
+  border-radius: var(--radius);
+}
+.import-options p {
+  margin-bottom: 8px;
+  font-size: 0.85rem;
+}
+#settings-meta {
+  font-size: 0.85rem;
+  line-height: 1.7;
+}
+.meta-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+}
+.meta-row:last-child {
+  border-bottom: none;
+}
+.meta-label {
+  color: var(--text-muted);
+}
+.meta-value {
+  color: var(--text);
+  font-weight: 500;
+}
+.settings-status {
+  margin-top: 12px;
+  padding: 10px 16px;
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+  display: none;
+}
+.settings-status.success {
+  display: block;
+  background: rgba(158, 206, 106, 0.15);
+  color: #9ece6a;
+  border: 1px solid #9ece6a;
+}
+.settings-status.error {
+  display: block;
+  background: rgba(247, 118, 142, 0.15);
+  color: #f7768e;
+  border: 1px solid #f7768e;
+}
+
+@media (max-width: 768px) {
+  .board {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 16px;
+  }
+  .column { min-width: unset; max-width: unset; }
+  header { flex-direction: column; gap: 8px; text-align: center; }
+  .card-actions { opacity: 1; }
+  .archive-nav { flex-direction: column; align-items: stretch; }
+  #settings-view { padding: 16px; }
+  .settings-section button { width: 100%; margin-right: 0; }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>Kanban</h1>
+  <nav>
+    <button id="view-board-btn" class="active">Board</button>
+    <button id="view-archive-btn">Archive</button>
+    <button id="view-settings-btn">Settings</button>
+  </nav>
+</header>
+
+<div id="board-view" class="view active">
+  <div class="board" id="board"></div>
+</div>
+
+<div id="archive-view" class="view">
+  <h2>Archived Cards</h2>
+  <div class="archive-nav">
+    <button id="archive-prev">◀</button>
+    <span class="week-label" id="archive-label"></span>
+    <button id="archive-next">▶</button>
+    <select id="archive-view-mode">
+      <option value="week">Week</option>
+      <option value="month">Month</option>
+      <option value="year">Year</option>
+    </select>
+  </div>
+  <div id="archive-list"></div>
+</div>
+
+<div id="settings-view" class="view">
+  <h2>Settings</h2>
+
+  <div class="settings-section">
+    <h3>Data Management</h3>
+    <button id="export-btn">Download Backup</button>
+    <button id="import-btn">Import Backup</button>
+    <input type="file" id="import-file-input" accept=".json" hidden>
+    <div id="import-options" class="import-options" style="display:none">
+      <p>Choose how to import the backup:</p>
+      <button id="import-replace-btn" class="btn-danger">Replace All Data</button>
+      <button id="import-merge-btn">Merge with Existing</button>
+      <button id="import-cancel-btn" class="btn-cancel">Cancel</button>
+    </div>
+    <button id="reset-btn" class="btn-danger">Reset All Data</button>
+  </div>
+
+  <div class="settings-section">
+    <h3>Database Info</h3>
+    <div id="settings-meta"></div>
+  </div>
+
+  <div id="settings-status" class="settings-status"></div>
+</div>
+
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal">
+    <h2 id="modal-title">Card</h2>
+    <label for="modal-card-title">Title</label>
+    <input type="text" id="modal-card-title" placeholder="Card title">
+    <label for="modal-card-desc">Description</label>
+    <textarea id="modal-card-desc" placeholder="Description (optional)"></textarea>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="modal-cancel">Cancel</button>
+      <button class="btn-confirm" id="modal-confirm">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── Data Layer ───────────────────────────────────────────────────────
+const STORAGE_KEY = 'kanban_v2_data';
+const DEFAULT_DATA = {
+  columns: [
+    { id: 'backlog',    title: 'Backlog',    cards: [] },
+    { id: 'todo',       title: 'To Do',      cards: [] },
+    { id: 'in-progress',title: 'In Progress', cards: [] },
+    { id: 'review',     title: 'Review',     cards: [] },
+    { id: 'done',       title: 'Done',       cards: [] },
+  ]
+};
+
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+
+function clone(obj) { return JSON.parse(JSON.stringify(obj)); }
+
+function loadData() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (_) {}
+  return clone(DEFAULT_DATA);
+}
+
+function saveData(data) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+}
+
+function getCard(columnId, cardId) {
+  const col = data.columns.find(c => c.id === columnId);
+  if (!col) return null;
+  const card = col.cards.find(c => c.id === cardId);
+  return card ? { card, column: col } : null;
+}
+
+// ─── State ────────────────────────────────────────────────────────────
+let data = loadData();
+let currentView = 'board';
+let dragState = null;
+let touchState = null;
+let modalState = null;
+
+// ─── Render ───────────────────────────────────────────────────────────
+function render() {
+  renderBoard();
+  renderArchive();
+}
+
+function renderBoard() {
+  const board = document.getElementById('board');
+  board.innerHTML = '';
+  data.columns.forEach(col => {
+    const nonArchived = col.cards.filter(c => !c.archived);
+    const el = document.createElement('div');
+    el.className = 'column';
+    el.dataset.columnId = col.id;
+    el.innerHTML = `
+      <div class="column-header">
+        <h2>${col.title}</h2>
+        <span class="count">${nonArchived.length}</span>
+      </div>
+      <div class="cards" data-column-id="${col.id}"></div>
+      <button class="add-card-btn" data-column-id="${col.id}">+ Add Card</button>
+    `;
+    const cardsContainer = el.querySelector('.cards');
+    nonArchived.sort((a, b) => a.order - b.order).forEach(card => {
+      cardsContainer.appendChild(createCardEl(card, col.id));
+    });
+    board.appendChild(el);
+
+    // DnD event listeners on column
+    el.addEventListener('dragover', onDragOver);
+    el.addEventListener('dragleave', onDragLeave);
+    el.addEventListener('drop', onDrop);
+    el.querySelector('.add-card-btn').addEventListener('click', () => openCreateModal(col.id));
+  });
+
+  // Touch DnD: document-level move/end
+}
+
+function createCardEl(card, columnId) {
+  const el = document.createElement('div');
+  el.className = 'card';
+  el.dataset.cardId = card.id;
+  el.dataset.columnId = columnId;
+  el.draggable = true;
+  el.innerHTML = `
+    <div class="card-title">${escapeHtml(card.title)}</div>
+    ${card.description ? `<div class="card-desc">${escapeHtml(card.description)}</div>` : ''}
+    <div class="card-actions">
+      <button class="edit-btn" data-action="edit">Edit</button>
+      <button class="duplicate-btn" data-action="duplicate">Duplicate</button>
+      <button class="archive-btn" data-action="archive">Archive</button>
+      <button class="delete-btn" data-action="delete">Delete</button>
+    </div>
+  `;
+
+  // DnD listeners
+  el.addEventListener('dragstart', onDragStart);
+  el.addEventListener('dragend', onDragEnd);
+
+  // Touch listeners
+  el.addEventListener('touchstart', onTouchStart, { passive: true });
+  el.addEventListener('touchmove', onTouchMove, { passive: false });
+  el.addEventListener('touchend', onTouchEnd, { passive: true });
+
+  // Action buttons
+  el.querySelectorAll('[data-action]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const action = btn.dataset.action;
+      if (action === 'edit') openEditModal(card.id, columnId);
+      else if (action === 'duplicate') duplicateCard(card.id, columnId);
+      else if (action === 'archive') archiveCard(card.id, columnId);
+      else if (action === 'delete') deleteCard(card.id, columnId);
+    });
+  });
+
+  return el;
+}
+
+function escapeHtml(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+// ─── Drag & Drop (Desktop) ────────────────────────────────────────────
+function onDragStart(e) {
+  const card = e.target.closest('.card');
+  if (!card) return;
+  dragState = {
+    cardId: card.dataset.cardId,
+    columnId: card.dataset.columnId,
+    element: card
+  };
+  card.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', card.dataset.cardId);
+}
+
+function onDragEnd(e) {
+  const card = e.target.closest('.card');
+  if (card) card.classList.remove('dragging');
+  document.querySelectorAll('.column.drag-over').forEach(el => el.classList.remove('drag-over'));
+  dragState = null;
+}
+
+function onDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  const col = e.target.closest('.column');
+  if (col) col.classList.add('drag-over');
+}
+
+function onDragLeave(e) {
+  const col = e.target.closest('.column');
+  if (col) col.classList.remove('drag-over');
+}
+
+function onDrop(e) {
+  e.preventDefault();
+  const col = e.target.closest('.column');
+  if (!col || !dragState) return;
+  col.classList.remove('drag-over');
+
+  const targetColumnId = col.dataset.columnId;
+  const sourceColumnId = dragState.columnId;
+  const cardId = dragState.cardId;
+
+  if (targetColumnId === sourceColumnId) {
+    // Reorder within same column
+    const cardsContainer = col.querySelector('.cards');
+    const dropIndex = getDropIndex(cardsContainer, e.clientY);
+    moveCardWithinColumn(cardId, sourceColumnId, dropIndex);
+  } else {
+    // Move to different column
+    const cardsContainer = col.querySelector('.cards');
+    const dropIndex = getDropIndex(cardsContainer, e.clientY);
+    moveCardToColumn(cardId, sourceColumnId, targetColumnId, dropIndex);
+  }
+}
+
+function getDropIndex(container, clientY) {
+  const cards = container.querySelectorAll('.card:not(.dragging)');
+  for (let i = 0; i < cards.length; i++) {
+    const rect = cards[i].getBoundingClientRect();
+    if (clientY < rect.top + rect.height / 2) return i;
+  }
+  return cards.length;
+}
+
+function moveCardWithinColumn(cardId, columnId, newIndex) {
+  const col = data.columns.find(c => c.id === columnId);
+  if (!col) return;
+  const idx = col.cards.findIndex(c => c.id === cardId);
+  if (idx === -1) return;
+  const [card] = col.cards.splice(idx, 1);
+  col.cards.splice(newIndex, 0, card);
+  reorderCards(col);
+  saveData(data);
+  renderBoard();
+}
+
+function moveCardToColumn(cardId, sourceId, targetId, newIndex) {
+  const srcCol = data.columns.find(c => c.id === sourceId);
+  const tgtCol = data.columns.find(c => c.id === targetId);
+  if (!srcCol || !tgtCol) return;
+  const idx = srcCol.cards.findIndex(c => c.id === cardId);
+  if (idx === -1) return;
+  const [card] = srcCol.cards.splice(idx, 1);
+  card.updatedAt = Date.now();
+  tgtCol.cards.splice(newIndex, 0, card);
+  reorderCards(srcCol);
+  reorderCards(tgtCol);
+  saveData(data);
+  renderBoard();
+}
+
+function reorderCards(column) {
+  column.cards.forEach((c, i) => c.order = i);
+}
+
+// ─── Touch DnD ────────────────────────────────────────────────────────
+function onTouchStart(e) {
+  const card = e.target.closest('.card');
+  if (!card) return;
+  const actionsBtn = e.target.closest('.card-actions');
+  if (actionsBtn) return;
+
+  const touch = e.touches[0];
+  const rect = card.getBoundingClientRect();
+
+  const clone = card.cloneNode(true);
+  clone.style.position = 'fixed';
+  clone.style.width = rect.width + 'px';
+  clone.style.left = rect.left + 'px';
+  clone.style.top = rect.top + 'px';
+  clone.style.zIndex = '300';
+  clone.style.pointerEvents = 'none';
+  clone.style.opacity = '0.85';
+  clone.style.transform = 'rotate(3deg)';
+  clone.style.transition = 'none';
+  document.body.appendChild(clone);
+
+  card.classList.add('dragging');
+
+  touchState = {
+    cardId: card.dataset.cardId,
+    columnId: card.dataset.columnId,
+    element: card,
+    clone,
+    offsetX: touch.clientX - rect.left,
+    offsetY: touch.clientY - rect.top,
+    lastEl: null
+  };
+}
+
+function onTouchMove(e) {
+  if (!touchState) return;
+  e.preventDefault();
+  const touch = e.touches[0];
+  touchState.clone.style.left = (touch.clientX - touchState.offsetX) + 'px';
+  touchState.clone.style.top = (touch.clientY - touchState.offsetY) + 'px';
+
+  // Find element under finger
+  touchState.clone.style.display = 'none';
+  const el = document.elementFromPoint(touch.clientX, touch.clientY);
+  touchState.clone.style.display = '';
+
+  const col = el?.closest('.column');
+  document.querySelectorAll('.column.drag-over').forEach(c => c.classList.remove('drag-over'));
+  if (col && col.dataset.columnId !== touchState.columnId) {
+    col.classList.add('drag-over');
+  }
+}
+
+function onTouchEnd(e) {
+  if (!touchState) return;
+  document.querySelectorAll('.column.drag-over').forEach(c => c.classList.remove('drag-over'));
+  touchState.clone.remove();
+  touchState.element.classList.remove('dragging');
+
+  const touch = e.changedTouches[0];
+  const el = document.elementFromPoint(touch.clientX, touch.clientY);
+  const col = el?.closest('.column');
+  const tgtColId = col ? col.dataset.columnId : touchState.columnId;
+  const cardsContainer = col ? col.querySelector('.cards') : null;
+  const dropIndex = cardsContainer ? getDropIndex(cardsContainer, touch.clientY) : 0;
+
+  if (tgtColId === touchState.columnId) {
+    moveCardWithinColumn(touchState.cardId, touchState.columnId, dropIndex);
+  } else {
+    moveCardToColumn(touchState.cardId, touchState.columnId, tgtColId, dropIndex);
+  }
+
+  touchState = null;
+}
+
+// ─── Card CRUD ────────────────────────────────────────────────────────
+function openCreateModal(columnId) {
+  modalState = { mode: 'create', columnId };
+  document.getElementById('modal-title').textContent = 'New Card';
+  document.getElementById('modal-card-title').value = '';
+  document.getElementById('modal-card-desc').value = '';
+  document.getElementById('modal-overlay').classList.add('active');
+  document.getElementById('modal-card-title').focus();
+}
+
+function openEditModal(cardId, columnId) {
+  const found = getCard(columnId, cardId);
+  if (!found) return;
+  modalState = { mode: 'edit', columnId, cardId };
+  document.getElementById('modal-title').textContent = 'Edit Card';
+  document.getElementById('modal-card-title').value = found.card.title;
+  document.getElementById('modal-card-desc').value = found.card.description || '';
+  document.getElementById('modal-overlay').classList.add('active');
+  document.getElementById('modal-card-title').focus();
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('active');
+  document.querySelector('label[for="modal-card-title"]').textContent = 'Title';
+  document.getElementById('modal-card-title').placeholder = 'Card title';
+  document.getElementById('modal-card-title').value = '';
+  document.querySelector('label[for="modal-card-desc"]').style.display = '';
+  document.getElementById('modal-card-desc').style.display = '';
+  document.getElementById('modal-card-desc').value = '';
+  const btn = document.getElementById('modal-confirm');
+  btn.textContent = 'Save';
+  btn.className = 'btn-confirm';
+  btn.disabled = false;
+  modalState = null;
+}
+
+function confirmModal() {
+  if (!modalState) return;
+
+  if (modalState.mode === 'reset') {
+    const input = document.getElementById('modal-card-title').value.trim();
+    if (input !== 'DELETE') return;
+    data = clone(DEFAULT_DATA);
+    saveData(data);
+    closeModal();
+    render();
+    showStatus('Data reset to default.', 'success');
+    return;
+  }
+
+  const title = document.getElementById('modal-card-title').value.trim();
+  if (!title) return;
+  const desc = document.getElementById('modal-card-desc').value.trim();
+
+  if (modalState.mode === 'create') {
+    const col = data.columns.find(c => c.id === modalState.columnId);
+    if (!col) return;
+    const card = {
+      id: uid(),
+      title,
+      description: desc,
+      order: col.cards.filter(c => !c.archived).length,
+      archived: false,
+      archivedAt: null,
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    };
+    col.cards.push(card);
+  } else {
+    const found = getCard(modalState.columnId, modalState.cardId);
+    if (!found) return;
+    found.card.title = title;
+    found.card.description = desc;
+    found.card.updatedAt = Date.now();
+  }
+
+  saveData(data);
+  closeModal();
+  renderBoard();
+}
+
+function deleteCard(cardId, columnId) {
+  if (!confirm('Delete this card?')) return;
+  const col = data.columns.find(c => c.id === columnId);
+  if (!col) return;
+  const idx = col.cards.findIndex(c => c.id === cardId);
+  if (idx === -1) return;
+  col.cards.splice(idx, 1);
+  reorderCards(col);
+  saveData(data);
+  renderBoard();
+}
+
+function duplicateCard(cardId, columnId) {
+  const found = getCard(columnId, cardId);
+  if (!found) return;
+  const newCard = clone(found.card);
+  newCard.id = uid();
+  newCard.title = found.card.title + ' (copy)';
+  newCard.order = found.card.order + 1;
+  newCard.createdAt = Date.now();
+  newCard.updatedAt = Date.now();
+  found.column.cards.splice(found.card.order + 1, 0, newCard);
+  reorderCards(found.column);
+  saveData(data);
+  renderBoard();
+}
+
+function archiveCard(cardId, columnId) {
+  const found = getCard(columnId, cardId);
+  if (!found) return;
+  found.card.archived = true;
+  found.card.archivedAt = Date.now();
+  found.card.updatedAt = Date.now();
+  saveData(data);
+  renderBoard();
+}
+
+// ─── Modal Events ─────────────────────────────────────────────────────
+document.getElementById('modal-confirm').addEventListener('click', confirmModal);
+document.getElementById('modal-cancel').addEventListener('click', closeModal);
+document.getElementById('modal-overlay').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeModal();
+});
+document.getElementById('modal-card-title').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); confirmModal(); }
+});
+
+// ─── Archive View ─────────────────────────────────────────────────────
+let archiveMode = 'week';
+let archiveOffset = 0;
+
+function renderArchive() {
+  const list = document.getElementById('archive-list');
+  const label = document.getElementById('archive-label');
+  const archived = getAllArchived();
+
+  if (archived.length === 0) {
+    label.textContent = '';
+    list.innerHTML = '<div class="archive-empty">No archived cards yet.</div>';
+    return;
+  }
+
+  const now = new Date();
+  let start, end;
+
+  if (archiveMode === 'week') {
+    start = getWeekStart(now, archiveOffset);
+    end = new Date(start);
+    end.setDate(end.getDate() + 7);
+    const weekNum = getISOWeek(start);
+    label.textContent = `${start.getFullYear()} · Week ${weekNum} (${start.toLocaleDateString()} - ${new Date(end.getTime() - 86400000).toLocaleDateString()})`;
+  } else if (archiveMode === 'month') {
+    start = new Date(now.getFullYear(), now.getMonth() + archiveOffset, 1);
+    end = new Date(start.getFullYear(), start.getMonth() + 1, 1);
+    label.textContent = start.toLocaleDateString(undefined, { year: 'numeric', month: 'long' });
+  } else {
+    start = new Date(now.getFullYear() + archiveOffset, 0, 1);
+    end = new Date(start.getFullYear() + 1, 0, 1);
+    label.textContent = start.getFullYear().toString();
+  }
+
+  const filtered = archived.filter(c => {
+    const d = new Date(c.archivedAt);
+    return d >= start && d < end;
+  });
+
+  if (filtered.length === 0) {
+    list.innerHTML = '<div class="archive-empty">No cards archived in this period.</div>';
+    return;
+  }
+
+  filtered.sort((a, b) => b.archivedAt - a.archivedAt);
+  list.innerHTML = filtered.map(c => {
+    const dateStr = new Date(c.archivedAt).toLocaleString();
+    const colTitle = data.columns.find(col => col.cards.some(cc => cc.id === c.id))?.title || 'Unknown';
+    return `
+      <div class="archive-card">
+        <div class="archived-date">Archived: ${dateStr}</div>
+        <div class="original-title">From: ${colTitle}</div>
+        <div class="content">
+          <div class="title">${escapeHtml(c.title)}</div>
+          ${c.description ? `<div class="desc">${escapeHtml(c.description)}</div>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function getAllArchived() {
+  const all = [];
+  data.columns.forEach(col => {
+    col.cards.forEach(c => {
+      if (c.archived) all.push(c);
+    });
+  });
+  return all;
+}
+
+function getWeekStart(date, offset) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + offset * 7);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  return new Date(d.getFullYear(), d.getMonth(), diff);
+}
+
+function getISOWeek(d) {
+  const t = new Date(d);
+  t.setDate(t.getDate() + 3 - (t.getDay() || 7));
+  const first = new Date(t.getFullYear(), 0, 1);
+  return 1 + Math.round(((t - first) / 86400000 - 3 + (first.getDay() || 7) - 1) / 7);
+}
+
+document.getElementById('archive-prev').addEventListener('click', () => {
+  archiveOffset--;
+  renderArchive();
+});
+document.getElementById('archive-next').addEventListener('click', () => {
+  archiveOffset++;
+  renderArchive();
+});
+document.getElementById('archive-view-mode').addEventListener('change', e => {
+  archiveMode = e.target.value;
+  archiveOffset = 0;
+  renderArchive();
+});
+
+// ─── View Switching ───────────────────────────────────────────────────
+function switchView(view) {
+  currentView = view;
+  document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('header nav button').forEach(el => el.classList.remove('active'));
+  document.getElementById(view + '-view').classList.add('active');
+  document.getElementById('view-' + view + '-btn').classList.add('active');
+  if (view === 'archive') renderArchive();
+  if (view === 'settings') renderSettings();
+}
+
+document.getElementById('view-board-btn').addEventListener('click', () => switchView('board'));
+document.getElementById('view-archive-btn').addEventListener('click', () => switchView('archive'));
+
+// ─── Settings ─────────────────────────────────────────────────────────
+let importedData = null;
+
+function exportData() {
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'kanban-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  showStatus('Backup downloaded.', 'success');
+}
+
+function onImportFileSelected(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    try {
+      importedData = JSON.parse(ev.target.result);
+      validateImportedData(importedData);
+      document.getElementById('import-options').style.display = 'block';
+    } catch (err) {
+      showStatus('Import failed: ' + err.message, 'error');
+      importedData = null;
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+function validateImportedData(obj) {
+  if (!obj || typeof obj !== 'object') throw new Error('not a valid JSON object');
+  if (!Array.isArray(obj.columns)) throw new Error('missing columns array');
+  if (obj.columns.length !== 5) throw new Error('expected 5 columns, got ' + obj.columns.length);
+  obj.columns.forEach(col => {
+    if (!col.id || !col.title || !Array.isArray(col.cards)) throw new Error('invalid column structure');
+    col.cards.forEach(card => {
+      if (!card.id || !card.title) throw new Error('card missing id or title in "' + col.title + '"');
+    });
+  });
+}
+
+function doImportReplace() {
+  if (!importedData) return;
+  if (!confirm('Replace all current data with the imported backup? This cannot be undone.')) return;
+  data = importedData;
+  saveData(data);
+  render();
+  document.getElementById('import-options').style.display = 'none';
+  importedData = null;
+  showStatus('Data replaced successfully.', 'success');
+}
+
+function doImportMerge() {
+  if (!importedData) return;
+  importedData.columns.forEach(impCol => {
+    const targetCol = data.columns.find(c => c.id === impCol.id);
+    if (!targetCol) return;
+    const sortedCards = clone(impCol.cards).sort((a, b) => (a.order || 0) - (b.order || 0));
+    sortedCards.forEach(card => {
+      if (targetCol.cards.some(c => c.id === card.id)) {
+        card.id = uid();
+      }
+      card.updatedAt = Date.now();
+      targetCol.cards.push(card);
+    });
+    reorderCards(targetCol);
+  });
+  saveData(data);
+  render();
+  document.getElementById('import-options').style.display = 'none';
+  importedData = null;
+  showStatus('Data merged successfully.', 'success');
+}
+
+function cancelImport() {
+  document.getElementById('import-options').style.display = 'none';
+  importedData = null;
+}
+
+function openResetModal() {
+  modalState = { mode: 'reset' };
+  document.getElementById('modal-title').textContent = 'Reset All Data';
+  document.querySelector('label[for="modal-card-title"]').textContent = 'Type DELETE to confirm';
+  document.getElementById('modal-card-title').placeholder = 'Type DELETE to confirm';
+  document.getElementById('modal-card-title').value = '';
+  document.querySelector('label[for="modal-card-desc"]').style.display = 'none';
+  document.getElementById('modal-card-desc').style.display = 'none';
+  const btn = document.getElementById('modal-confirm');
+  btn.textContent = 'Delete All';
+  btn.className = 'btn-danger';
+  btn.disabled = true;
+  document.getElementById('modal-overlay').classList.add('active');
+  document.getElementById('modal-card-title').focus();
+}
+
+function renderSettings() {
+  const meta = document.getElementById('settings-meta');
+  document.getElementById('import-options').style.display = 'none';
+  importedData = null;
+
+  const allCards = [];
+  data.columns.forEach(col => {
+    col.cards.forEach(c => { allCards.push({ ...c, colTitle: col.title }); });
+  });
+  const total = allCards.length;
+  const active = allCards.filter(c => !c.archived).length;
+  const archived = allCards.filter(c => c.archived).length;
+  const perCol = data.columns.map(col => {
+    const n = col.cards.filter(c => !c.archived).length;
+    return col.title + ': ' + n;
+  }).join(' &middot; ');
+  const lastModified = allCards.length
+    ? new Date(Math.max(...allCards.map(c => c.updatedAt || 0))).toLocaleString()
+    : 'N/A';
+  const size = new Blob([JSON.stringify(data)]).size;
+  const sizeStr = size < 1024 ? size + ' B' : (size / 1024).toFixed(1) + ' KB';
+
+  meta.innerHTML = `
+    <div class="meta-row"><span class="meta-label">Total cards</span><span class="meta-value">${total}</span></div>
+    <div class="meta-row"><span class="meta-label">Active cards</span><span class="meta-value">${active}</span></div>
+    <div class="meta-row"><span class="meta-label">Archived cards</span><span class="meta-value">${archived}</span></div>
+    <div class="meta-row"><span class="meta-label">Cards per column</span><span class="meta-value">${perCol}</span></div>
+    <div class="meta-row"><span class="meta-label">Last modified</span><span class="meta-value">${lastModified}</span></div>
+    <div class="meta-row"><span class="meta-label">Data size</span><span class="meta-value">${sizeStr}</span></div>
+  `;
+}
+
+function showStatus(msg, type) {
+  const el = document.getElementById('settings-status');
+  el.textContent = msg;
+  el.className = 'settings-status ' + (type || '');
+  setTimeout(() => { el.textContent = ''; el.className = 'settings-status'; }, 4000);
+}
+
+document.getElementById('export-btn').addEventListener('click', exportData);
+document.getElementById('import-btn').addEventListener('click', () => document.getElementById('import-file-input').click());
+document.getElementById('import-file-input').addEventListener('change', onImportFileSelected);
+document.getElementById('import-replace-btn').addEventListener('click', doImportReplace);
+document.getElementById('import-merge-btn').addEventListener('click', doImportMerge);
+document.getElementById('import-cancel-btn').addEventListener('click', cancelImport);
+document.getElementById('reset-btn').addEventListener('click', openResetModal);
+document.getElementById('view-settings-btn').addEventListener('click', () => switchView('settings'));
+
+document.getElementById('modal-card-title').addEventListener('input', () => {
+  if (modalState && modalState.mode === 'reset') {
+    document.getElementById('modal-confirm').disabled = document.getElementById('modal-card-title').value.trim() !== 'DELETE';
+  }
+});
+
+// ─── Init ─────────────────────────────────────────────────────────────
+render();
+</script>
+</body>
+</html>
